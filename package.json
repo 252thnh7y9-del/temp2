@@ -19,6 +19,9 @@
   "homepage": "https://github.com/252thnh7y9-del/temp2#readme",
   "type": "module",
   "dependencies": {
-    "@anthropic-ai/sdk": "^1.10.0"
+    "@tesseract.js-data/eng": "^1.0.0",
+    "jpeg-js": "^0.4.4",
+    "pngjs": "^7.0.0",
+    "tesseract.js": "^7.0.0"
   }
 }
