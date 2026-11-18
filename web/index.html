@@ -166,7 +166,7 @@
   const abs = (p) => new URL(p, location.href).href;
   let workerPromise = null;
   function getWorker() {
-    workerPromise ??= Tesseract.createWorker("eng", 1, {
+    if (!workerPromise) workerPromise = Tesseract.createWorker("eng", 1, {
       workerPath: abs("ocr-worker.js"),
       corePath: abs("vendor/core/"),
       langPath: abs("vendor"),
@@ -247,9 +247,20 @@
     }
   }
 
+  // Decode the photo. Prefers createImageBitmap; falls back to <img> for older Safari.
   async function loadBitmap(blob) {
-    try { return await createImageBitmap(blob, { imageOrientation: "from-image" }); }
-    catch { return await createImageBitmap(blob); }
+    if (window.createImageBitmap) {
+      try { return await createImageBitmap(blob, { imageOrientation: "from-image" }); } catch (e) {}
+      try { return await createImageBitmap(blob); } catch (e) {}
+    }
+    const url = URL.createObjectURL(blob);
+    try {
+      const img = new Image();
+      await new Promise((ok, fail) => { img.onload = ok; img.onerror = () => fail(new Error("This file isn't an image the browser can open")); img.src = url; });
+      return img;
+    } finally {
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
   }
 
   async function readPhoto(blob, name) {
@@ -262,9 +273,10 @@
       clearBoard();
       setStatus("Opening photo…", { progress: 0 });
       const bmp = await loadBitmap(blob);
-      const scale = Math.min(1, MAX_SIDE / Math.max(bmp.width, bmp.height));
-      canvas.width = Math.round(bmp.width * scale);
-      canvas.height = Math.round(bmp.height * scale);
+      const bw = bmp.naturalWidth || bmp.width, bh = bmp.naturalHeight || bmp.height;
+      const scale = Math.min(1, MAX_SIDE / Math.max(bw, bh));
+      canvas.width = Math.round(bw * scale);
+      canvas.height = Math.round(bh * scale);
       ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
       $("photo-name").textContent = name;
       const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);

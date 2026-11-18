@@ -255,8 +255,8 @@ function interpret(words, screen) {
 
   // Period: number under a PERIOD label, else the number nearest the centre line.
   let periodW = null;
-  for (const l of periodLabels) periodW ??= closestBelow(l, free());
-  periodW ??= free()
+  for (const l of periodLabels) if (!periodW) periodW = closestBelow(l, free());
+  if (!periodW) periodW = free()
     .filter((n) => Math.abs(n.cx - midX) < screen.w * 0.1)
     .sort((a, b) => Math.abs(a.cx - midX) - Math.abs(b.cx - midX))[0] ?? null;
   take(periodW);
@@ -266,8 +266,8 @@ function interpret(words, screen) {
     if (!score) return null;
     const side = (w) => (w.cx < midX) === (score.cx < midX);
     let n = null;
-    for (const l of foulLabels.filter(side)) n ??= closestBelow(l, free());
-    n ??= closestBelow(score, free());
+    for (const l of foulLabels.filter(side)) if (!n) n = closestBelow(l, free());
+    if (!n) n = closestBelow(score, free());
     return take(n) ? Number(n.digits) : null;
   };
 
