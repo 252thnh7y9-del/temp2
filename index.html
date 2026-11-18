@@ -135,6 +135,9 @@
   .qlabels .on { color: var(--fg); font-weight: 600; }
   .game-note { margin: 0; font-size: 0.85rem; color: var(--muted); }
   .game-note.warn { color: var(--warn); }
+  .tiles.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .tile .k.team { overflow-wrap: anywhere; }
+  .tile.total { background: var(--bg); }
   .legend { display: flex; gap: 14px; flex-wrap: wrap; }
   .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border: 2px solid; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
   .legend .k-read::before { border-color: #ffd34d; }
@@ -150,6 +153,9 @@
     .btn { justify-content: center; padding: 12px 10px; }
     .board { gap: 12px; padding: 16px 12px 16px; }
     .tile .v { font-size: 1.5rem; }
+    .tiles.three { gap: 8px; }
+    .tiles.three .tile { padding: 10px 8px; }
+    .tiles.three .tile .v { font-size: 1.35rem; }
   }
 </style>
 </head>
@@ -208,6 +214,16 @@
           <div class="qlabels" id="qlabels"><span>Q1</span><span>Q2</span><span>Q3</span><span>Q4</span></div>
         </div>
         <p class="game-note" id="game-note">Waiting for a photo</p>
+      </section>
+
+      <section class="game" aria-live="polite">
+        <h2>Scoring pace <small>points per minute</small></h2>
+        <div class="tiles three">
+          <div class="tile"><span class="k team" id="ppm-home-k">Home</span><span class="v" id="ppm-home">–</span><span class="s" id="ppm-home-s">&nbsp;</span></div>
+          <div class="tile"><span class="k team" id="ppm-away-k">Away</span><span class="v" id="ppm-away">–</span><span class="s" id="ppm-away-s">&nbsp;</span></div>
+          <div class="tile total"><span class="k">Total</span><span class="v" id="ppm-total">–</span><span class="s" id="ppm-total-s">&nbsp;</span></div>
+        </div>
+        <p class="game-note" id="pace-note">Waiting for a photo</p>
       </section>
 
       <p class="note">Works best with the whole screen in frame and the photo roughly level. The left team is treated as home. A dash means that part couldn't be read.</p>
@@ -276,7 +292,36 @@
     $("home-fouls").textContent = show(r.home.fouls);
     $("away-fouls").textContent = show(r.away.fouls);
     $("board").classList.remove("pending");
-    renderGame(gameTime(r.seconds, r.period));
+    const t = gameTime(r.seconds, r.period);
+    renderGame(t);
+    renderPace(r, t);
+  }
+
+  // ---------- scoring pace: points per minute of game time played ----------
+  function renderPace(r, t) {
+    const set = (id, v) => { $(id).textContent = v; };
+    set("ppm-home-k", r?.home.name || "Home");
+    set("ppm-away-k", r?.away.name || "Away");
+    const mins = t && !t.error && t.gElapsed != null ? t.gElapsed / 60 : null;
+    const pts = { home: r?.home.score ?? null, away: r?.away.score ?? null };
+    pts.total = pts.home != null && pts.away != null ? pts.home + pts.away : null;
+    const ppm = (p) => (p == null || !mins ? "–" : (p / mins).toFixed(2));
+    const sub = (p) => (p == null ? "\u00a0" : `${p} pts`);
+    for (const k of ["home", "away", "total"]) {
+      set(`ppm-${k}`, ppm(pts[k]));
+      set(`ppm-${k}-s`, sub(pts[k]));
+    }
+    let note, warn = false;
+    if (!r) { note = "Waiting for a photo"; }
+    else if (mins == null) { note = "Needs the clock and period to know how much game time has been played."; warn = true; }
+    else if (mins === 0) { note = "No game time has been played yet."; }
+    else if (pts.total == null) { note = "Couldn't read both scores."; warn = true; }
+    else {
+      note = `Over ${fmt(t.gElapsed)} of game time played.`;
+      if (t.overtime) note += " Overtime minutes aren't counted.";
+    }
+    $("pace-note").textContent = note;
+    $("pace-note").classList.toggle("warn", warn);
   }
 
   // ---------- game time (8-minute quarters, 4 quarters) ----------
@@ -352,6 +397,8 @@
     $("clock").textContent = "-:--";
     $("game-note").textContent = "Reading…";
     $("game-note").classList.remove("warn");
+    renderPace(null, null);
+    $("pace-note").textContent = "Reading…";
     $("board").classList.add("pending");
   }
 
@@ -418,6 +465,8 @@
     } catch (e) {
       console.error(e);
       renderGame({ error: "Couldn't read this photo." });
+      renderPace(null, null);
+      $("pace-note").textContent = "Couldn't read this photo.";
       setStatus(e.message === "Could not find the scoreboard screen"
         ? "Couldn't find the scoreboard screen in this photo. Make sure the whole board is in frame."
         : `Something went wrong reading the photo: ${e.message}`, { err: true, progress: 0 });
