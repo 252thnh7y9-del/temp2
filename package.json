@@ -5,8 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build:web": "node scripts/build-web.mjs",
-    "serve": "npm run build:web && npx --yes http-server web -p 8080 -c-1"
+    "serve": "npx --yes http-server . -p 8080 -c-1",
+    "vendor": "node scripts/vendor.mjs"
   },
   "repository": {
     "type": "git",
