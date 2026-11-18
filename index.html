@@ -107,9 +107,19 @@
   @media (prefers-reduced-motion: reduce) { .bar > i { transition: none; } }
 
   /* ---- photo (top of the card) ---- */
-  .photo { position: relative; line-height: 0; background: #000; }
+  .photo { position: relative; line-height: 0; background: #000; overflow: hidden; }
+  .zoom {
+    position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; line-height: 1;
+    background: rgba(0, 0, 0, 0.55); padding: 4px; border-radius: 999px;
+  }
+  .zoom button {
+    font: 700 0.8rem var(--body); color: #fff; background: transparent; border: 0; cursor: pointer;
+    min-width: 38px; height: 32px; padding: 0 6px; border-radius: 999px; font-variant-numeric: tabular-nums;
+  }
+  .zoom button[aria-pressed="true"] { background: #ffd34d; color: #111; }
+  .zoom button:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
   .photo canvas, .photo video { width: 100%; height: auto; display: block; }
-  .photo video { max-height: 70vh; object-fit: contain; background: #000; }
+  .photo video { max-height: 70vh; object-fit: contain; background: #000; transform-origin: 50% 50%; }
   .live-badge {
     position: absolute; top: 10px; left: 10px; line-height: 1;
     font: 700 0.72rem var(--body); letter-spacing: 0.1em; color: #fff;
@@ -203,6 +213,7 @@
         <canvas id="photo" width="800" height="600" aria-label="Scoreboard photo with detected text outlined"></canvas>
         <video id="video" playsinline muted autoplay hidden aria-label="Live camera view"></video>
         <span class="live-badge" id="live-badge" hidden>LIVE</span>
+        <div class="zoom" id="zoom" role="group" aria-label="Zoom" hidden></div>
         <figure class="inset" id="inset" hidden>
           <canvas id="inset-canvas" width="320" height="180" aria-label="Last frame that was read successfully"></canvas>
           <figcaption id="inset-cap">Last good read</figcaption>
@@ -569,6 +580,50 @@
   const inset = $("inset-canvas");
   const insetCtx = inset.getContext("2d");
   let live = false, stream = null, liveRun = null, wakeLock = null, ticker = null;
+
+  // ---------- zoom: the camera's own zoom when the browser offers it, otherwise a centre crop ----------
+  const ZOOM_STEPS = [1, 1.5, 2, 3, 4];
+  let zoom = 1, hwZoom = null; // hwZoom = {min, max} when the camera supports zoom
+  try { zoom = Number(localStorage.getItem("zoom")) || 1; } catch (e) {}
+
+  function setupZoom(track) {
+    const caps = track?.getCapabilities?.() || {};
+    hwZoom = caps.zoom && caps.zoom.max > 1 ? { min: caps.zoom.min || 1, max: caps.zoom.max } : null;
+    const steps = ZOOM_STEPS.filter((z) => !hwZoom || (z >= hwZoom.min && z <= hwZoom.max));
+    if (!steps.includes(zoom)) zoom = 1;
+    const box = $("zoom");
+    box.replaceChildren(...steps.map((z) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.textContent = `${z}×`; b.dataset.z = z;
+      b.setAttribute("aria-label", `Zoom ${z} times`);
+      b.addEventListener("click", () => setZoom(z));
+      return b;
+    }));
+    box.hidden = false;
+    setZoom(zoom);
+  }
+
+  async function setZoom(z) {
+    zoom = z;
+    try { localStorage.setItem("zoom", String(z)); } catch (e) {}
+    for (const b of $("zoom").children) b.setAttribute("aria-pressed", String(Number(b.dataset.z) === z));
+    const track = stream?.getVideoTracks()[0];
+    if (hwZoom && track) {
+      try {
+        await track.applyConstraints({ advanced: [{ zoom: z }] });
+        video.style.transform = "";
+        return;
+      } catch (e) { hwZoom = null; }   // camera refused: fall back to digital zoom
+    }
+    video.style.transform = z === 1 ? "" : `scale(${z})`;
+  }
+
+  // Region of the video frame to read: the whole frame, or the centre for digital zoom.
+  function cropRegion(vw, vh) {
+    const z = hwZoom ? 1 : zoom;
+    const sw = vw / z, sh = vh / z;
+    return { sx: (vw - sw) / 2, sy: (vh - sh) / 2, sw, sh };
+  }
   let lastGood = 0, reads = 0, goodReads = 0, lastReadMs = 0;
 
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -582,6 +637,7 @@
     const parts = [];
     parts.push(lastGood ? `Last good read ${ago(Date.now() - lastGood)}` : "Looking for the scoreboard…");
     if (reads) parts.push(`${goodReads}/${reads} frames read`);
+    if (zoom !== 1) parts.push(`${zoom}× ${hwZoom ? "camera" : "digital"} zoom`);
     setStatus(parts.join(" · "), { progress: null, timing: lastReadMs ? `${(lastReadMs / 1000).toFixed(1)} s / read` : "" });
     $("bar").parentElement.hidden = true;
   }
@@ -592,7 +648,8 @@
       setStatus("Asking for the camera…", { progress: null });
       stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
-        video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        // Ask for as much resolution as the camera offers, so digital zoom keeps detail.
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 3840 }, height: { ideal: 2160 } },
       });
     } catch (e) {
       console.error(e);
@@ -611,6 +668,7 @@
     const btn = $("live-btn");
     btn.textContent = "Stop video"; btn.classList.add("live-on"); btn.setAttribute("aria-pressed", "true");
     lastGood = 0; reads = 0; goodReads = 0; lastReadMs = 0;
+    setupZoom(stream.getVideoTracks()[0]);
     $("inset").hidden = true;
     try { wakeLock = await navigator.wakeLock?.request("screen"); } catch (e) { wakeLock = null; }
     await getWorker().catch(() => {});
@@ -622,10 +680,10 @@
   async function liveLoop() {
     while (live) {
       if (video.readyState < 2 || !video.videoWidth) { await sleep(100); continue; }
-      const vw = video.videoWidth, vh = video.videoHeight;
-      const scale = Math.min(1, LIVE_MAX_SIDE / Math.max(vw, vh));
-      frame.width = Math.round(vw * scale); frame.height = Math.round(vh * scale);
-      frameCtx.drawImage(video, 0, 0, frame.width, frame.height);
+      const { sx, sy, sw, sh } = cropRegion(video.videoWidth, video.videoHeight);
+      const scale = Math.min(1, LIVE_MAX_SIDE / Math.max(sw, sh));
+      frame.width = Math.round(sw * scale); frame.height = Math.round(sh * scale);
+      frameCtx.drawImage(video, sx, sy, sw, sh, 0, 0, frame.width, frame.height);
       const pixels = frameCtx.getImageData(0, 0, frame.width, frame.height);
       const t0 = performance.now();
       let result = null, words = [];
@@ -658,6 +716,7 @@
     await liveRun?.catch(() => {});
     stream?.getTracks().forEach((t) => t.stop());
     stream = null; video.srcObject = null;
+    video.style.transform = ""; $("zoom").hidden = true;
     try { await wakeLock?.release(); } catch (e) {}
     wakeLock = null;
     video.hidden = true; $("live-badge").hidden = true; $("inset").hidden = true;
