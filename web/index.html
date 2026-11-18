@@ -1,3 +1,8 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Scoreboard Reader</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -35,11 +40,14 @@
     --board: #0f1324; color-scheme: dark;
   }
 
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
   body {
+    margin: 0;
     background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.5;
     padding-left: max(16px, env(safe-area-inset-left, 0px));
     padding-right: max(16px, env(safe-area-inset-right, 0px));
-    padding-block: 24px 40px;
+    padding-block: calc(24px + env(safe-area-inset-top, 0px)) calc(40px + env(safe-area-inset-bottom, 0px));
   }
   .wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 20px; }
 
@@ -58,17 +66,22 @@
   .btn[aria-disabled="true"] { opacity: 0.5; pointer-events: none; }
   input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 
-  .main { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
-  @media (max-width: 820px) { .main { grid-template-columns: minmax(0, 1fr); } .drop { order: 2; } }
+  /* Photo and read-out are one stacked card; game time sits beside it on wide screens, below it on phones. */
+  .main { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+  .side { display: grid; gap: 14px; min-width: 0; }
+  @media (max-width: 820px) { .main { grid-template-columns: minmax(0, 1fr); gap: 14px; } }
+
+  .card { border-radius: 12px; overflow: hidden; background: var(--board); box-shadow: 0 0 0 1px var(--line), 0 10px 30px rgba(10, 14, 30, 0.18); }
+  .card.over { box-shadow: 0 0 0 3px var(--accent); }
+  .card:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
   /* ---- read-out board ---- */
   .board {
-    background-color: var(--board); color: var(--led); border-radius: 10px; padding: 22px 20px 20px;
+    background-color: var(--board); color: var(--led); padding: 20px 16px 18px;
     background-image:
       linear-gradient(var(--board-grid) 1px, transparent 1px),
       linear-gradient(90deg, var(--board-grid) 1px, transparent 1px);
     background-size: 14px 14px;
-    box-shadow: 0 0 0 6px #0a0c16, 0 10px 30px rgba(10, 14, 30, 0.25);
     display: grid; gap: 14px; text-align: center;
   }
   .led { font-family: var(--display); font-weight: 700; font-variant-numeric: tabular-nums; text-shadow: 0 0 14px rgba(143, 208, 255, 0.35); line-height: 1; }
@@ -82,8 +95,6 @@
   .period .led { font-size: 2.2rem; }
   .fouls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .fouls .led { font-size: 1.6rem; margin-top: 4px; }
-  .remaining { border-top: 1px solid rgba(143, 208, 255, 0.15); padding-top: 12px; color: var(--led-dim); font-size: 0.9rem; }
-  .remaining strong { color: var(--led); font-weight: 600; }
   .board.pending .led, .board.pending .name { opacity: 0.35; }
 
   .status { display: grid; gap: 8px; }
@@ -93,21 +104,56 @@
   .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
   @media (prefers-reduced-motion: reduce) { .bar > i { transition: none; } }
 
-  /* ---- photo ---- */
-  .drop {
-    position: relative; background: var(--surface); border: 1px dashed var(--line); border-radius: 10px;
-    padding: 10px; display: grid; gap: 8px;
+  /* ---- photo (top of the card) ---- */
+  .photo { position: relative; line-height: 0; background: #000; }
+  .photo canvas { width: 100%; height: auto; display: block; }
+  .photo-meta {
+    display: flex; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap;
+    color: var(--led-dim); font-size: 0.8rem; padding: 8px 14px;
+    border-bottom: 1px solid rgba(143, 208, 255, 0.12); background: #0b0e1b;
   }
-  .drop.over { border-color: var(--accent); border-style: solid; }
-  .photo { position: relative; line-height: 0; }
-  .photo canvas { width: 100%; height: auto; border-radius: 6px; display: block; }
-  .photo-meta { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 0.85rem; flex-wrap: wrap; }
+  #photo-name { overflow-wrap: anywhere; min-width: 0; }
+
+  /* ---- game time ---- */
+  .game {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px;
+    display: grid; gap: 14px;
+  }
+  .game h2 { margin: 0; font-family: var(--display); font-size: 1.05rem; font-weight: 600; letter-spacing: 0.02em; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; align-items: baseline; }
+  .game h2 small { font-family: var(--body); font-weight: 500; font-size: 0.8rem; color: var(--muted); letter-spacing: 0; }
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .tile { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 4px; min-width: 0; }
+  .tile .k { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .tile .v { font-family: var(--display); font-weight: 700; font-size: 1.7rem; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .tile .s { font-size: 0.8rem; color: var(--muted); }
+  .tile.remain .v { color: var(--accent); }
+  .timeline { display: grid; gap: 6px; }
+  .track { position: relative; height: 12px; border-radius: 6px; background: var(--line); overflow: hidden; }
+  .track > i { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent); border-radius: 6px 0 0 6px; }
+  .track > b { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--surface); }
+  .qlabels { display: grid; grid-template-columns: repeat(4, 1fr); font-size: 0.75rem; color: var(--muted); text-align: center; }
+  .qlabels .on { color: var(--fg); font-weight: 600; }
+  .game-note { margin: 0; font-size: 0.85rem; color: var(--muted); }
+  .game-note.warn { color: var(--warn); }
   .legend { display: flex; gap: 14px; flex-wrap: wrap; }
   .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border: 2px solid; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
   .legend .k-read::before { border-color: #ffd34d; }
   .legend .k-other::before { border-color: #8a94a8; }
   .note { color: var(--muted); font-size: 0.85rem; margin: 0; max-width: 70ch; }
+
+  @media (max-width: 560px) {
+    body { padding-block: calc(14px + env(safe-area-inset-top, 0px)) calc(28px + env(safe-area-inset-bottom, 0px)); }
+    .wrap { gap: 14px; }
+    h1 { font-size: 1.4rem; }
+    header p { font-size: 0.88rem; }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+    .btn { justify-content: center; padding: 12px 10px; }
+    .board { gap: 12px; padding: 16px 12px 16px; }
+    .tile .v { font-size: 1.5rem; }
+  }
 </style>
+</head>
+<body>
 
 <div class="wrap">
   <header>
@@ -123,16 +169,13 @@
   </header>
 
   <div class="main">
-    <section class="drop" id="drop" tabindex="0" aria-label="Photo. Drop or paste an image here.">
+    <section class="card" id="drop" tabindex="0" aria-label="Photo and reading. Drop or paste an image here.">
       <div class="photo"><canvas id="photo" width="800" height="600" aria-label="Scoreboard photo with detected text outlined"></canvas></div>
       <div class="photo-meta">
         <span id="photo-name">Sample photo</span>
-        <span class="legend"><span class="k-read">Score, clock, period</span><span class="k-other">Other text</span></span>
+        <span class="legend"><span class="k-read">Read</span><span class="k-other">Other text</span></span>
       </div>
-    </section>
-
-    <div class="status-wrap" style="display:grid;gap:14px">
-      <section class="board pending" id="board" aria-live="polite">
+      <div class="board pending" id="board" aria-live="polite">
         <div><div class="cap">Time</div><div class="led clock" id="clock">-:--</div></div>
         <div class="teams">
           <div class="team"><div class="name" id="home-name">HOME</div><div class="led score" id="home-score">--</div></div>
@@ -143,13 +186,30 @@
           <div><div class="cap">Team fouls</div><div class="led" id="home-fouls">-</div></div>
           <div><div class="cap">Team fouls</div><div class="led" id="away-fouls">-</div></div>
         </div>
-        <div class="remaining" id="remaining">Waiting for a photo</div>
-      </section>
+      </div>
+    </section>
 
+    <div class="side">
       <div class="status">
         <div class="status-line" id="status-line"><span id="status">Loading the text reader…</span><span id="timing"></span></div>
         <div class="bar"><i id="bar"></i></div>
       </div>
+
+      <section class="game" aria-live="polite">
+        <h2>Game time <small>8-minute quarters</small></h2>
+        <div class="tiles">
+          <div class="tile"><span class="k">Quarter elapsed</span><span class="v" id="q-elapsed">–</span><span class="s" id="q-elapsed-s">&nbsp;</span></div>
+          <div class="tile remain"><span class="k">Quarter left</span><span class="v" id="q-left">–</span><span class="s" id="q-left-s">&nbsp;</span></div>
+          <div class="tile"><span class="k">Game elapsed</span><span class="v" id="g-elapsed">–</span><span class="s" id="g-elapsed-s">of 32:00</span></div>
+          <div class="tile remain"><span class="k">Game left</span><span class="v" id="g-left">–</span><span class="s" id="g-left-s">&nbsp;</span></div>
+        </div>
+        <div class="timeline" aria-hidden="true">
+          <div class="track"><i id="g-fill"></i><b style="left:25%"></b><b style="left:50%"></b><b style="left:75%"></b></div>
+          <div class="qlabels" id="qlabels"><span>Q1</span><span>Q2</span><span>Q3</span><span>Q4</span></div>
+        </div>
+        <p class="game-note" id="game-note">Waiting for a photo</p>
+      </section>
+
       <p class="note">Works best with the whole screen in frame and the photo roughly level. The left team is treated as home. A dash means that part couldn't be read.</p>
     </div>
   </div>
@@ -216,23 +276,82 @@
     $("home-fouls").textContent = show(r.home.fouls);
     $("away-fouls").textContent = show(r.away.fouls);
     $("board").classList.remove("pending");
-    $("remaining").innerHTML = r.seconds == null
-      ? "Couldn't read the clock"
-      : `<strong>${formatRemaining(r.seconds)}</strong> left in the period`;
+    renderGame(gameTime(r.seconds, r.period));
   }
 
-  function formatRemaining(s) {
-    if (s === 0) return "No time";
-    if (s < 60) return `${s} second${s === 1 ? "" : "s"}`;
-    const m = Math.floor(s / 60), sec = Math.round(s % 60);
-    return `${m} min ${sec} sec`;
+  // ---------- game time (8-minute quarters, 4 quarters) ----------
+  const QUARTER = 8 * 60, QUARTERS = 4, GAME = QUARTER * QUARTERS;
+
+  // seconds: clock reading (time left in the quarter); period: 1-4, >4 = overtime
+  function gameTime(seconds, period) {
+    if (seconds == null) return { error: "Couldn't read the clock, so game time can't be worked out." };
+    const t = { qLeft: seconds, qElapsed: null, gElapsed: null, gLeft: null, period, note: "", warn: false };
+    if (seconds > QUARTER) {
+      t.warn = true;
+      t.note = `The clock shows more than 8:00, so these quarters may not be 8 minutes.`;
+      return t;
+    }
+    t.qElapsed = QUARTER - seconds;
+    if (period == null) {
+      t.warn = true;
+      t.note = "Couldn't read the period, so only this quarter is shown.";
+    } else if (period > QUARTERS) {
+      t.gElapsed = GAME; t.gLeft = 0; t.overtime = true;
+      t.qElapsed = null;
+      t.note = `Overtime ${period - QUARTERS}: regulation is over. Overtime length isn't assumed.`;
+    } else {
+      t.gElapsed = (period - 1) * QUARTER + t.qElapsed;
+      t.gLeft = (QUARTERS - period) * QUARTER + seconds;
+      t.note = t.gLeft === 0 ? "Final: regulation is over."
+        : seconds === 0 ? `End of Q${period}.`
+        : `Q${period} of ${QUARTERS}, ${Math.round((t.gElapsed / GAME) * 100)}% of regulation played.`;
+    }
+    return t;
+  }
+
+  // 154 -> "2:34", 45.3 -> "0:45.3", 0 -> "0:00"
+  function fmt(s) {
+    if (s == null) return "–";
+    const tenths = Math.round(s * 10);
+    const m = Math.floor(tenths / 600), sec = (tenths % 600) / 10;
+    const ss = Number.isInteger(sec) ? String(sec).padStart(2, "0") : sec.toFixed(1).padStart(4, "0");
+    return `${m}:${ss}`;
+  }
+
+  function renderGame(t) {
+    const set = (id, v) => { $(id).textContent = v; };
+    if (t.error) {
+      for (const id of ["q-elapsed", "q-left", "g-elapsed", "g-left"]) set(id, "–");
+      set("q-elapsed-s", "\u00a0"); set("q-left-s", "\u00a0"); set("g-left-s", "\u00a0");
+      $("g-fill").style.width = "0";
+      setQuarterLabel(null);
+      $("game-note").textContent = t.error;
+      $("game-note").classList.add("warn");
+      return;
+    }
+    set("q-elapsed", fmt(t.qElapsed));
+    set("q-left", fmt(t.qLeft));
+    set("g-elapsed", fmt(t.gElapsed));
+    set("g-left", fmt(t.gLeft));
+    set("q-elapsed-s", t.qElapsed == null ? "\u00a0" : "of 8:00");
+    set("q-left-s", t.period ? (t.overtime ? `OT${t.period - QUARTERS}` : `in Q${t.period}`) : "\u00a0");
+    set("g-left-s", t.gLeft == null ? "\u00a0" : "in regulation");
+    $("g-fill").style.width = t.gElapsed == null ? "0" : `${(t.gElapsed / GAME) * 100}%`;
+    setQuarterLabel(t.period && t.period <= QUARTERS ? t.period : null);
+    $("game-note").textContent = t.note;
+    $("game-note").classList.toggle("warn", t.warn);
+  }
+
+  function setQuarterLabel(q) {
+    [...$("qlabels").children].forEach((el, i) => el.classList.toggle("on", i + 1 === q));
   }
 
   function clearBoard() {
     for (const id of ["home-score", "away-score"]) $(id).textContent = "--";
     for (const id of ["period", "home-fouls", "away-fouls"]) $(id).textContent = "-";
     $("clock").textContent = "-:--";
-    $("remaining").textContent = "Reading…";
+    $("game-note").textContent = "Reading…";
+    $("game-note").classList.remove("warn");
     $("board").classList.add("pending");
   }
 
@@ -298,7 +417,7 @@
       });
     } catch (e) {
       console.error(e);
-      $("remaining").textContent = "Couldn't read this photo";
+      renderGame({ error: "Couldn't read this photo." });
       setStatus(e.message === "Could not find the scoreboard screen"
         ? "Couldn't find the scoreboard screen in this photo. Make sure the whole board is in frame."
         : `Something went wrong reading the photo: ${e.message}`, { err: true, progress: 0 });
@@ -336,3 +455,5 @@
 
   readSample();
 </script>
+</body>
+</html>
