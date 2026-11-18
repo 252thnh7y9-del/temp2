@@ -1,8 +1,9 @@
 name: Publish web page
 
-# Runs only when started by hand (Actions tab -> "Publish web page" -> Run workflow),
-# after Pages is enabled with Source = GitHub Actions. The published site is public.
+# Publishes web/ to GitHub Pages (public). Needs Pages enabled with Source = GitHub Actions.
 on:
+  push:
+    branches: [claude/elegant-noether-0oo5j5]
   workflow_dispatch:
 
 permissions:
