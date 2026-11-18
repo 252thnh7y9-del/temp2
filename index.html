@@ -41,6 +41,7 @@
   }
 
   *, *::before, *::after { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html { -webkit-text-size-adjust: 100%; }
   body {
     margin: 0;
@@ -99,6 +100,7 @@
 
   .status { display: grid; gap: 8px; }
   .status-line { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 0.9rem; }
+  #timing { white-space: nowrap; }
   .status-line.err { color: var(--warn); }
   .bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
   .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
@@ -106,7 +108,24 @@
 
   /* ---- photo (top of the card) ---- */
   .photo { position: relative; line-height: 0; background: #000; }
-  .photo canvas { width: 100%; height: auto; display: block; }
+  .photo canvas, .photo video { width: 100%; height: auto; display: block; }
+  .photo video { max-height: 70vh; object-fit: contain; background: #000; }
+  .live-badge {
+    position: absolute; top: 10px; left: 10px; line-height: 1;
+    font: 700 0.72rem var(--body); letter-spacing: 0.1em; color: #fff;
+    background: #d6363b; padding: 5px 8px 5px 20px; border-radius: 4px;
+  }
+  .live-badge::before { content: ""; position: absolute; left: 8px; top: 50%; width: 7px; height: 7px; margin-top: -3.5px; border-radius: 50%; background: #fff; animation: blink 1.2s infinite; }
+  @keyframes blink { 50% { opacity: 0.25; } }
+  @media (prefers-reduced-motion: reduce) { .live-badge::before { animation: none; } }
+  .inset {
+    position: absolute; right: 8px; bottom: 8px; width: 30%; max-width: 200px; margin: 0;
+    background: #0b0e1b; border: 2px solid #ffd34d; border-radius: 6px; overflow: hidden; line-height: 1.2;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  }
+  .inset canvas { width: 100%; display: block; }
+  .inset figcaption { font: 600 0.7rem var(--body); color: #ffd34d; padding: 4px 6px; }
+  .btn.live-on { background: #d6363b; border-color: #d6363b; color: #fff; }
   .photo-meta {
     display: flex; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap;
     color: var(--led-dim); font-size: 0.8rem; padding: 8px 14px;
@@ -169,18 +188,26 @@
   <header>
     <div>
       <h1>Scoreboard Reader</h1>
-      <p>Pick a photo of the scoreboard. It's read right here in your browser; the photo never leaves your device.</p>
+      <p>Pick a photo or point the camera at the scoreboard. It's read right here in your browser; nothing leaves your device.</p>
     </div>
     <div class="actions">
       <label class="btn" id="pick-btn" for="file">Choose photo</label>
       <input type="file" id="file" accept="image/*">
-      <button class="btn secondary" id="sample-btn" type="button">Use sample</button>
+      <button class="btn secondary" id="live-btn" type="button" aria-pressed="false">Live video</button>
     </div>
   </header>
 
   <div class="main">
     <section class="card" id="drop" tabindex="0" aria-label="Photo and reading. Drop or paste an image here.">
-      <div class="photo"><canvas id="photo" width="800" height="600" aria-label="Scoreboard photo with detected text outlined"></canvas></div>
+      <div class="photo">
+        <canvas id="photo" width="800" height="600" aria-label="Scoreboard photo with detected text outlined"></canvas>
+        <video id="video" playsinline muted autoplay hidden aria-label="Live camera view"></video>
+        <span class="live-badge" id="live-badge" hidden>LIVE</span>
+        <figure class="inset" id="inset" hidden>
+          <canvas id="inset-canvas" width="320" height="180" aria-label="Last frame that was read successfully"></canvas>
+          <figcaption id="inset-cap">Last good read</figcaption>
+        </figure>
+      </div>
       <div class="photo-meta">
         <span id="photo-name">Sample photo</span>
         <span class="legend"><span class="k-read">Read</span><span class="k-other">Other text</span></span>
@@ -446,14 +473,14 @@
     $("board").classList.add("pending");
   }
 
-  function drawBoxes(words) {
-    const lw = Math.max(2, canvas.width / 400);
+  function drawBoxes(words, c = ctx, cw = canvas.width) {
+    const lw = Math.max(2, cw / 400);
     for (const w of words) {
       const key = !!w.role;
-      ctx.lineWidth = key ? lw * 1.5 : lw;
-      ctx.strokeStyle = key ? "#ffd34d" : "rgba(138,148,168,0.9)";
+      c.lineWidth = key ? lw * 1.5 : lw;
+      c.strokeStyle = key ? "#ffd34d" : "rgba(138,148,168,0.9)";
       const m = lw * 2;
-      ctx.strokeRect(w.x0 - m, w.y0 - m, w.w + 2 * m, w.h + 2 * m);
+      c.strokeRect(w.x0 - m, w.y0 - m, w.w + 2 * m, w.h + 2 * m);
     }
   }
 
@@ -475,9 +502,10 @@
 
   async function readPhoto(blob, name) {
     if (busy) return;
+    if (live) await stopLive();
     busy = true;
     $("pick-btn").setAttribute("aria-disabled", "true");
-    $("sample-btn").disabled = true;
+    $("live-btn").disabled = true;
     const t0 = performance.now();
     try {
       clearBoard();
@@ -517,7 +545,7 @@
     } finally {
       busy = false;
       $("pick-btn").removeAttribute("aria-disabled");
-      $("sample-btn").disabled = false;
+      $("live-btn").disabled = false;
     }
   }
 
@@ -531,7 +559,123 @@
     if (f) readPhoto(f, f.name);
     e.target.value = "";
   });
-  $("sample-btn").addEventListener("click", readSample);
+  $("live-btn").addEventListener("click", () => (live ? stopLive() : startLive()));
+
+  // ---------- live video: read frames continuously, keep the last good reading ----------
+  const LIVE_MAX_SIDE = 1600;
+  const video = $("video");
+  const frame = document.createElement("canvas");
+  const frameCtx = frame.getContext("2d", { willReadFrequently: true });
+  const inset = $("inset-canvas");
+  const insetCtx = inset.getContext("2d");
+  let live = false, stream = null, liveRun = null, wakeLock = null, ticker = null;
+  let lastGood = 0, reads = 0, goodReads = 0, lastReadMs = 0;
+
+  if (!navigator.mediaDevices?.getUserMedia) {
+    $("live-btn").hidden = true;   // no camera API (e.g. not HTTPS): photo mode only
+  }
+
+  const isGood = (r) => r.home.score != null && r.away.score != null && r.clock != null;
+  const ago = (ms) => { const s = Math.round(ms / 1000); return s < 2 ? "just now" : s < 60 ? `${s} s ago` : `${Math.floor(s / 60)} min ago`; };
+
+  function liveStatus(reading) {
+    const parts = [];
+    parts.push(lastGood ? `Last good read ${ago(Date.now() - lastGood)}` : "Looking for the scoreboard…");
+    if (reads) parts.push(`${goodReads}/${reads} frames read`);
+    setStatus(parts.join(" · "), { progress: null, timing: lastReadMs ? `${(lastReadMs / 1000).toFixed(1)} s / read` : "" });
+    $("bar").parentElement.hidden = true;
+  }
+
+  async function startLive() {
+    if (busy || live) return;
+    try {
+      setStatus("Asking for the camera…", { progress: null });
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      });
+    } catch (e) {
+      console.error(e);
+      const denied = e && (e.name === "NotAllowedError" || e.name === "SecurityError");
+      setStatus(denied
+        ? "Camera access was blocked. Allow the camera for this site in Safari's settings, then try again."
+        : `Couldn't start the camera: ${e.message || e.name}`, { err: true, progress: 0 });
+      return;
+    }
+    live = true;
+    video.srcObject = stream;
+    try { await video.play(); } catch (e) {}
+    stream.getVideoTracks()[0]?.addEventListener("ended", () => stopLive());
+    canvas.hidden = true; video.hidden = false; $("live-badge").hidden = false;
+    $("photo-name").textContent = "Live camera";
+    const btn = $("live-btn");
+    btn.textContent = "Stop video"; btn.classList.add("live-on"); btn.setAttribute("aria-pressed", "true");
+    lastGood = 0; reads = 0; goodReads = 0; lastReadMs = 0;
+    $("inset").hidden = true;
+    try { wakeLock = await navigator.wakeLock?.request("screen"); } catch (e) { wakeLock = null; }
+    await getWorker().catch(() => {});
+    liveStatus();
+    ticker = setInterval(() => { if (live) { liveStatus(); $("inset-cap").textContent = `Read ${ago(Date.now() - lastGood)}`; } }, 1000);
+    liveRun = liveLoop();
+  }
+
+  async function liveLoop() {
+    while (live) {
+      if (video.readyState < 2 || !video.videoWidth) { await sleep(100); continue; }
+      const vw = video.videoWidth, vh = video.videoHeight;
+      const scale = Math.min(1, LIVE_MAX_SIDE / Math.max(vw, vh));
+      frame.width = Math.round(vw * scale); frame.height = Math.round(vh * scale);
+      frameCtx.drawImage(video, 0, 0, frame.width, frame.height);
+      const pixels = frameCtx.getImageData(0, 0, frame.width, frame.height);
+      const t0 = performance.now();
+      let result = null, words = [];
+      try {
+        result = await readScoreboardPixels(pixels, ocr, { onWords: (w) => { words = w; } });
+      } catch (e) { /* screen not found in this frame */ }
+      lastReadMs = performance.now() - t0;
+      reads++;
+      if (!live) break;
+      if (result && isGood(result)) {
+        goodReads++;
+        lastGood = Date.now();
+        render(result);
+        // Keep the frame that produced this reading, with the detected text outlined.
+        inset.width = frame.width; inset.height = frame.height;
+        insetCtx.drawImage(frame, 0, 0);
+        drawBoxes(words, insetCtx, inset.width);
+        $("inset").hidden = false;
+        $("inset-cap").textContent = "Read just now";
+      }
+      liveStatus();
+      await sleep(50);
+    }
+  }
+
+  async function stopLive() {
+    if (!live) return;
+    live = false;
+    clearInterval(ticker);
+    await liveRun?.catch(() => {});
+    stream?.getTracks().forEach((t) => t.stop());
+    stream = null; video.srcObject = null;
+    try { await wakeLock?.release(); } catch (e) {}
+    wakeLock = null;
+    video.hidden = true; $("live-badge").hidden = true; $("inset").hidden = true;
+    const btn = $("live-btn");
+    btn.textContent = "Live video"; btn.classList.remove("live-on"); btn.setAttribute("aria-pressed", "false");
+    // Leave the last good frame in the preview so the board below matches what's shown.
+    if (lastGood) {
+      canvas.width = inset.width; canvas.height = inset.height;
+      ctx.drawImage(inset, 0, 0);
+      $("photo-name").textContent = `Live camera · last good read`;
+    }
+    canvas.hidden = false;
+    setStatus(lastGood ? `Stopped. Showing the last good read (${goodReads} of ${reads} frames read).` : "Stopped. No frame could be read.",
+      { err: !lastGood, progress: null });
+    $("bar").parentElement.hidden = true;
+  }
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   const drop = $("drop");
   drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
