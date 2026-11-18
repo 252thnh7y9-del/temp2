@@ -138,6 +138,10 @@
   .tiles.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .tile .k.team { overflow-wrap: anywhere; }
   .tile.total { background: var(--bg); }
+  .tile.need { grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 12px; border-color: var(--accent); }
+  .tile.need .k, .tile.need .s { grid-column: 1; }
+  .tile.need .v { grid-column: 2; grid-row: 1 / span 2; color: var(--accent); text-align: right; }
+  .tile.need .v small { display: block; font-family: var(--body); font-size: 0.72rem; font-weight: 500; color: var(--muted); }
   .legend { display: flex; gap: 14px; flex-wrap: wrap; }
   .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border: 2px solid; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
   .legend .k-read::before { border-color: #ffd34d; }
@@ -222,6 +226,11 @@
           <div class="tile"><span class="k team" id="ppm-home-k">Home</span><span class="v" id="ppm-home">–</span><span class="s" id="ppm-home-s">&nbsp;</span></div>
           <div class="tile"><span class="k team" id="ppm-away-k">Away</span><span class="v" id="ppm-away">–</span><span class="s" id="ppm-away-s">&nbsp;</span></div>
           <div class="tile total"><span class="k">Total</span><span class="v" id="ppm-total">–</span><span class="s" id="ppm-total-s">&nbsp;</span></div>
+        </div>
+        <div class="tile need">
+          <span class="k" id="need-k">To win</span>
+          <span class="s" id="need-s">If the leader stops scoring</span>
+          <span class="v" id="need-v">–<small>pts / min</small></span>
         </div>
         <p class="game-note" id="pace-note">Waiting for a photo</p>
       </section>
@@ -322,6 +331,41 @@
     }
     $("pace-note").textContent = note;
     $("pace-note").classList.toggle("warn", warn);
+    renderNeed(r, t, mins);
+  }
+
+  // Pace the trailing team needs to win by the end of regulation, if the leader stops scoring.
+  // Winning means getting one point more than the leader.
+  function renderNeed(r, t, minsPlayed) {
+    const k = $("need-k"), sEl = $("need-s"), v = $("need-v");
+    const value = (txt) => { v.innerHTML = ""; v.append(txt); const sm = document.createElement("small"); sm.textContent = "pts / min"; v.append(sm); };
+    k.textContent = "To win";
+    const h = r?.home.score, a = r?.away.score;
+    if (!r || h == null || a == null || !t || t.error || t.gLeft == null) {
+      value("–");
+      sEl.textContent = !r ? "If the leader stops scoring"
+        : t?.overtime ? "Overtime length isn't known, so this can't be worked out."
+        : "Needs both scores, the clock and the period.";
+      return;
+    }
+    const home = r.home.name || "Home", away = r.away.name || "Away";
+    const trailing = h < a ? { name: home, score: h } : h > a ? { name: away, score: a } : null;
+    const lead = Math.abs(h - a);
+    const need = lead + 1;
+    const minsLeft = t.gLeft / 60;
+    if (minsLeft === 0) {
+      value("–");
+      k.textContent = trailing ? `${h > a ? home : away} won` : "Tied at the end of regulation";
+      sEl.textContent = trailing ? `by ${lead}. No time left.` : "Overtime decides it.";
+      return;
+    }
+    const pace = need / minsLeft;
+    const current = trailing && minsPlayed ? trailing.score / minsPlayed : null;
+    value(pace.toFixed(2));
+    k.textContent = trailing ? `${trailing.name} to win` : "Tied: either team to win";
+    sEl.textContent = `${need} pt${need === 1 ? "" : "s"} in ${fmt(t.gLeft)}`
+      + (current != null ? `, scoring ${current.toFixed(2)} now` : "")
+      + ". Assumes the leader stops scoring.";
   }
 
   // ---------- game time (8-minute quarters, 4 quarters) ----------
