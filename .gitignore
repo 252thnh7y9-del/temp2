@@ -1,1 +1,3 @@
 node_modules/
+web/vendor/
+web/scoreboard-core.js

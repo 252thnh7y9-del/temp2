@@ -1,0 +1,326 @@
+<title>Scoreboard Reader</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+  /* Layout: tool strip on top, then the read-out board beside the annotated photo (stacked on phones). */
+  :root {
+    --bg: #eef1f6;
+    --surface: #ffffff;
+    --fg: #172033;
+    --muted: #5b6579;
+    --line: #d5dbe6;
+    --accent: #1f6fd1;
+    --accent-fg: #ffffff;
+    --warn: #a05a00;
+    /* The read-out is a scoreboard in both themes */
+    --board: #161a2e;
+    --board-grid: rgba(255, 255, 255, 0.045);
+    --led: #8fd0ff;
+    --led-dim: #5e86a8;
+    --display: "Chakra Petch", "Arial Narrow", system-ui, sans-serif;
+    --body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0c0f1a; --surface: #151a2a; --fg: #e4e9f3; --muted: #97a1b6; --line: #273049;
+      --accent: #6cb6ff; --accent-fg: #0c0f1a; --warn: #f0b45c;
+      --board: #0f1324; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0c0f1a; --surface: #151a2a; --fg: #e4e9f3; --muted: #97a1b6; --line: #273049;
+    --accent: #6cb6ff; --accent-fg: #0c0f1a; --warn: #f0b45c;
+    --board: #0f1324; color-scheme: dark;
+  }
+
+  body {
+    background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.5;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 24px 40px;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 20px; }
+
+  header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; }
+  h1 { font-family: var(--display); font-weight: 700; font-size: 1.75rem; letter-spacing: 0.02em; margin: 0; text-wrap: balance; }
+  header p { margin: 2px 0 0; color: var(--muted); max-width: 60ch; }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+    font: 600 0.95rem var(--body); padding: 10px 16px; border-radius: 8px;
+    border: 1px solid var(--accent); background: var(--accent); color: var(--accent-fg);
+  }
+  .btn.secondary { background: transparent; color: var(--accent); }
+  .btn:focus-visible, .drop:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .btn[aria-disabled="true"] { opacity: 0.5; pointer-events: none; }
+  input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+  .main { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+  @media (max-width: 820px) { .main { grid-template-columns: minmax(0, 1fr); } .drop { order: 2; } }
+
+  /* ---- read-out board ---- */
+  .board {
+    background-color: var(--board); color: var(--led); border-radius: 10px; padding: 22px 20px 20px;
+    background-image:
+      linear-gradient(var(--board-grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--board-grid) 1px, transparent 1px);
+    background-size: 14px 14px;
+    box-shadow: 0 0 0 6px #0a0c16, 0 10px 30px rgba(10, 14, 30, 0.25);
+    display: grid; gap: 14px; text-align: center;
+  }
+  .led { font-family: var(--display); font-weight: 700; font-variant-numeric: tabular-nums; text-shadow: 0 0 14px rgba(143, 208, 255, 0.35); line-height: 1; }
+  .cap { font-family: var(--display); font-weight: 600; font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--led-dim); }
+  .clock { font-size: clamp(3.2rem, 9vw, 4.6rem); }
+  .teams { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: end; }
+  .team { display: grid; gap: 8px; min-width: 0; }
+  .name { font-family: var(--display); font-weight: 600; font-size: clamp(1rem, 3.4vw, 1.3rem); letter-spacing: 0.04em; overflow-wrap: anywhere; }
+  .score { font-size: clamp(3rem, 10vw, 4.4rem); }
+  .period { display: grid; gap: 6px; padding-bottom: 4px; }
+  .period .led { font-size: 2.2rem; }
+  .fouls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .fouls .led { font-size: 1.6rem; margin-top: 4px; }
+  .remaining { border-top: 1px solid rgba(143, 208, 255, 0.15); padding-top: 12px; color: var(--led-dim); font-size: 0.9rem; }
+  .remaining strong { color: var(--led); font-weight: 600; }
+  .board.pending .led, .board.pending .name { opacity: 0.35; }
+
+  .status { display: grid; gap: 8px; }
+  .status-line { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 0.9rem; }
+  .status-line.err { color: var(--warn); }
+  .bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
+  @media (prefers-reduced-motion: reduce) { .bar > i { transition: none; } }
+
+  /* ---- photo ---- */
+  .drop {
+    position: relative; background: var(--surface); border: 1px dashed var(--line); border-radius: 10px;
+    padding: 10px; display: grid; gap: 8px;
+  }
+  .drop.over { border-color: var(--accent); border-style: solid; }
+  .photo { position: relative; line-height: 0; }
+  .photo canvas { width: 100%; height: auto; border-radius: 6px; display: block; }
+  .photo-meta { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 0.85rem; flex-wrap: wrap; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border: 2px solid; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .legend .k-read::before { border-color: #ffd34d; }
+  .legend .k-other::before { border-color: #8a94a8; }
+  .note { color: var(--muted); font-size: 0.85rem; margin: 0; max-width: 70ch; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Scoreboard Reader</h1>
+      <p>Pick a photo of the scoreboard. It's read right here in your browser; the photo never leaves your device.</p>
+    </div>
+    <div class="actions">
+      <label class="btn" id="pick-btn" for="file">Choose photo</label>
+      <input type="file" id="file" accept="image/*">
+      <button class="btn secondary" id="sample-btn" type="button">Use sample</button>
+    </div>
+  </header>
+
+  <div class="main">
+    <section class="drop" id="drop" tabindex="0" aria-label="Photo. Drop or paste an image here.">
+      <div class="photo"><canvas id="photo" width="800" height="600" aria-label="Scoreboard photo with detected text outlined"></canvas></div>
+      <div class="photo-meta">
+        <span id="photo-name">Sample photo</span>
+        <span class="legend"><span class="k-read">Score, clock, period</span><span class="k-other">Other text</span></span>
+      </div>
+    </section>
+
+    <div class="status-wrap" style="display:grid;gap:14px">
+      <section class="board pending" id="board" aria-live="polite">
+        <div><div class="cap">Time</div><div class="led clock" id="clock">-:--</div></div>
+        <div class="teams">
+          <div class="team"><div class="name" id="home-name">HOME</div><div class="led score" id="home-score">--</div></div>
+          <div class="period"><div class="cap">Period</div><div class="led" id="period">-</div></div>
+          <div class="team"><div class="name" id="away-name">AWAY</div><div class="led score" id="away-score">--</div></div>
+        </div>
+        <div class="fouls">
+          <div><div class="cap">Team fouls</div><div class="led" id="home-fouls">-</div></div>
+          <div><div class="cap">Team fouls</div><div class="led" id="away-fouls">-</div></div>
+        </div>
+        <div class="remaining" id="remaining">Waiting for a photo</div>
+      </section>
+
+      <div class="status">
+        <div class="status-line" id="status-line"><span id="status">Loading the text reader…</span><span id="timing"></span></div>
+        <div class="bar"><i id="bar"></i></div>
+      </div>
+      <p class="note">Works best with the whole screen in frame and the photo roughly level. The left team is treated as home. A dash means that part couldn't be read.</p>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/tesseract.min.js"></script>
+<script type="module">
+  import { readScoreboardPixels } from "./scoreboard-core.js";
+
+  const $ = (id) => document.getElementById(id);
+  const MAX_SIDE = 2000; // photos are scaled down to this for speed
+
+  // ---------- OCR engine (all files served alongside this page) ----------
+  const abs = (p) => new URL(p, location.href).href;
+  let workerPromise = null;
+  function getWorker() {
+    workerPromise ??= Tesseract.createWorker("eng", 1, {
+      workerPath: abs("ocr-worker.js"),
+      corePath: abs("vendor/core/"),
+      langPath: abs("vendor"),
+      workerBlobURL: false,
+      gzip: true,
+      cacheMethod: "none",
+    });
+    workerPromise.catch(() => { workerPromise = null; });
+    return workerPromise;
+  }
+
+  async function ocr(crop, { mode, whitelist }) {
+    const worker = await getWorker();
+    await worker.setParameters({
+      tessedit_pageseg_mode: mode === "word" ? Tesseract.PSM.SINGLE_WORD : Tesseract.PSM.SINGLE_LINE,
+      tessedit_char_whitelist: whitelist,
+    });
+    const c = document.createElement("canvas");
+    c.width = crop.width; c.height = crop.height;
+    c.getContext("2d").putImageData(new ImageData(crop.data, crop.width, crop.height), 0, 0);
+    const { data } = await worker.recognize(c);
+    return { text: data.text, confidence: data.confidence };
+  }
+
+  // ---------- UI ----------
+  const canvas = $("photo");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  let busy = false;
+
+  function setStatus(text, { err = false, progress = null, timing = "" } = {}) {
+    $("status").textContent = text;
+    $("status-line").classList.toggle("err", err);
+    $("timing").textContent = timing;
+    if (progress != null) $("bar").style.width = `${Math.round(progress * 100)}%`;
+    $("bar").parentElement.hidden = progress === 1 || (err && progress === 0);
+  }
+
+  const show = (v, fallback = "–") => (v === null || v === undefined || v === "" ? fallback : String(v));
+
+  function render(r) {
+    $("clock").textContent = show(r.clock, "-:--");
+    $("home-name").textContent = show(r.home.name, "HOME");
+    $("away-name").textContent = show(r.away.name, "AWAY");
+    $("home-score").textContent = show(r.home.score, "--");
+    $("away-score").textContent = show(r.away.score, "--");
+    $("period").textContent = show(r.period);
+    $("home-fouls").textContent = show(r.home.fouls);
+    $("away-fouls").textContent = show(r.away.fouls);
+    $("board").classList.remove("pending");
+    $("remaining").innerHTML = r.seconds == null
+      ? "Couldn't read the clock"
+      : `<strong>${formatRemaining(r.seconds)}</strong> left in the period`;
+  }
+
+  function formatRemaining(s) {
+    if (s === 0) return "No time";
+    if (s < 60) return `${s} second${s === 1 ? "" : "s"}`;
+    const m = Math.floor(s / 60), sec = Math.round(s % 60);
+    return `${m} min ${sec} sec`;
+  }
+
+  function clearBoard() {
+    for (const id of ["home-score", "away-score"]) $(id).textContent = "--";
+    for (const id of ["period", "home-fouls", "away-fouls"]) $(id).textContent = "-";
+    $("clock").textContent = "-:--";
+    $("remaining").textContent = "Reading…";
+    $("board").classList.add("pending");
+  }
+
+  function drawBoxes(words) {
+    const lw = Math.max(2, canvas.width / 400);
+    for (const w of words) {
+      const key = !!w.role;
+      ctx.lineWidth = key ? lw * 1.5 : lw;
+      ctx.strokeStyle = key ? "#ffd34d" : "rgba(138,148,168,0.9)";
+      const m = lw * 2;
+      ctx.strokeRect(w.x0 - m, w.y0 - m, w.w + 2 * m, w.h + 2 * m);
+    }
+  }
+
+  async function loadBitmap(blob) {
+    try { return await createImageBitmap(blob, { imageOrientation: "from-image" }); }
+    catch { return await createImageBitmap(blob); }
+  }
+
+  async function readPhoto(blob, name) {
+    if (busy) return;
+    busy = true;
+    $("pick-btn").setAttribute("aria-disabled", "true");
+    $("sample-btn").disabled = true;
+    const t0 = performance.now();
+    try {
+      clearBoard();
+      setStatus("Opening photo…", { progress: 0 });
+      const bmp = await loadBitmap(blob);
+      const scale = Math.min(1, MAX_SIDE / Math.max(bmp.width, bmp.height));
+      canvas.width = Math.round(bmp.width * scale);
+      canvas.height = Math.round(bmp.height * scale);
+      ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+      $("photo-name").textContent = name;
+      const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+      setStatus("Loading the text reader…", { progress: 0.02 });
+      await getWorker();
+      setStatus("Reading the scoreboard…", { progress: 0.05 });
+      let words = [];
+      const result = await readScoreboardPixels(pixels, ocr, {
+        onProgress: (p) => setStatus("Reading the scoreboard…", { progress: 0.05 + p * 0.95 }),
+        onWords: (w) => { words = w; },
+      });
+      drawBoxes(words);
+      render(result);
+      const secs = ((performance.now() - t0) / 1000).toFixed(1);
+      const missing = [result.home.score, result.away.score, result.clock].some((v) => v == null);
+      setStatus(missing ? "Read part of the board. Try a straighter, closer photo." : "Done", {
+        err: missing, progress: 1, timing: `${secs} s`,
+      });
+    } catch (e) {
+      console.error(e);
+      $("remaining").textContent = "Couldn't read this photo";
+      setStatus(e.message === "Could not find the scoreboard screen"
+        ? "Couldn't find the scoreboard screen in this photo. Make sure the whole board is in frame."
+        : `Something went wrong reading the photo: ${e.message}`, { err: true, progress: 0 });
+    } finally {
+      busy = false;
+      $("pick-btn").removeAttribute("aria-disabled");
+      $("sample-btn").disabled = false;
+    }
+  }
+
+  async function readSample() {
+    const res = await fetch("sample.jpg");
+    readPhoto(await res.blob(), "Sample photo");
+  }
+
+  $("file").addEventListener("change", (e) => {
+    const f = e.target.files?.[0];
+    if (f) readPhoto(f, f.name);
+    e.target.value = "";
+  });
+  $("sample-btn").addEventListener("click", readSample);
+
+  const drop = $("drop");
+  drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+  drop.addEventListener("drop", (e) => {
+    e.preventDefault(); drop.classList.remove("over");
+    const f = [...(e.dataTransfer?.files ?? [])].find((f) => f.type.startsWith("image/"));
+    if (f) readPhoto(f, f.name);
+  });
+  document.addEventListener("paste", (e) => {
+    const item = [...(e.clipboardData?.items ?? [])].find((i) => i.type.startsWith("image/"));
+    if (item) readPhoto(item.getAsFile(), "Pasted image");
+  });
+
+  readSample();
+</script>
