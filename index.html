@@ -172,7 +172,6 @@
   .tile.need .k, .tile.need .s { grid-column: 1; }
   .tile.need .v { grid-column: 2; grid-row: 1 / span 2; color: var(--accent); text-align: right; }
   .tile.need .v small { display: block; font-family: var(--body); font-size: 0.72rem; font-weight: 500; color: var(--muted); }
-  .note { color: var(--muted); font-size: 0.85rem; margin: 0; max-width: 70ch; }
 
   @media (max-width: 560px) {
     body { padding-block: calc(14px + env(safe-area-inset-top, 0px)) calc(28px + env(safe-area-inset-bottom, 0px)); }
@@ -230,8 +229,8 @@
 
     <div class="side">
       <div class="status">
-        <div class="status-line" id="status-line"><span id="status">Loading the text reader…</span><span id="timing"></span></div>
-        <div class="bar"><i id="bar"></i></div>
+        <div class="status-line" id="status-line"><span id="status"></span><span id="timing"></span></div>
+        <div class="bar" hidden><i id="bar"></i></div>
       </div>
 
       <section class="game" aria-live="polite">
@@ -264,7 +263,6 @@
         <p class="game-note" id="pace-note">Waiting for a photo</p>
       </section>
 
-      <p class="note">Works best with the whole screen in frame and the photo roughly level. The left team is treated as home. A dash means that part couldn't be read.</p>
     </div>
   </div>
 </div>
@@ -617,11 +615,6 @@
     return result;
   }
 
-  async function readSample() {
-    const res = await fetch("samples/firebirds-final.jpg");
-    readPhoto(await res.blob(), "Sample photo");
-  }
-
   $("file").addEventListener("change", (e) => {
     const f = e.target.files?.[0];
     if (f) readPhoto(f, f.name);
@@ -837,7 +830,8 @@
     if (item) readPhoto(item.getAsFile(), "Pasted image");
   });
 
-  readSample();
+  // Start with a blank board; load the text reader in the background so the first read is quick.
+  getWorker().catch(() => {});
 </script>
 </body>
 </html>
