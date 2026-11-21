@@ -25,5 +25,9 @@
     "jpeg-js": "^0.4.4",
     "pngjs": "^7.0.0",
     "tesseract.js": "^7.0.0"
+  },
+  "devDependencies": {
+    "@fontsource/chakra-petch": "^5.3.0",
+    "@fontsource/inter": "^5.3.0"
   }
 }

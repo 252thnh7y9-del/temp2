@@ -5,10 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>Scoreboard Reader</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#161a2e">
+<!-- iOS home-screen app -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Scoreboard">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <style>
+  @font-face { font-family: "Chakra Petch"; font-weight: 500; font-display: swap; src: url("vendor/fonts/chakra-petch-latin-500-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Chakra Petch"; font-weight: 600; font-display: swap; src: url("vendor/fonts/chakra-petch-latin-600-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Chakra Petch"; font-weight: 700; font-display: swap; src: url("vendor/fonts/chakra-petch-latin-700-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 400; font-display: swap; src: url("vendor/fonts/inter-latin-400-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 500; font-display: swap; src: url("vendor/fonts/inter-latin-500-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 600; font-display: swap; src: url("vendor/fonts/inter-latin-600-normal.woff2") format("woff2"); }
   /* Layout: tool strip on top, then the read-out board beside the annotated photo (stacked on phones). */
   :root {
     --bg: #eef1f6;
@@ -930,6 +942,18 @@
 
   // Start with a blank board; load the text reader in the background so the first read is quick.
   getWorker().catch(() => {});
+
+  // ---------- offline: a service worker keeps every file the page needs ----------
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js").then(async () => {
+      // First visit: tell the user once everything is stored and the app works offline.
+      if (!navigator.serviceWorker.controller) {
+        await navigator.serviceWorker.ready;
+        if (!$("status").textContent) setStatus("Saved for offline use.", { progress: null });
+        $("bar").parentElement.hidden = true;
+      }
+    }).catch((e) => console.warn("Offline support unavailable:", e));
+  }
 </script>
 </body>
 </html>
