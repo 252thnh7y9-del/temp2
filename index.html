@@ -460,14 +460,14 @@
   // ---------- likely to win ----------
   // The final margin (home minus away) is modelled as a normal distribution, the usual
   // random-walk model for basketball scores (Stern, 1994):
-  //   expected margin = current lead + (shrunk) scoring-rate difference x minutes left
+  //   expected margin = current lead
   //   spread (s.d.)   = sqrt(SWING x scoring rate x minutes left)
-  // SWING ~1.25 matches the ~16-point s.d. of NBA final margins at ~4.2 points/minute;
-  // scaling by this game's scoring rate adapts it to slower youth games.
-  const SWING = 1.25;        // margin variance per point scored
+  // The pace difference isn't projected forward: the lead already reflects it.
+  // SWING 2.0 is above the NBA's ~1.25 because youth games are streakier; it puts a
+  // 15-point lead at the halfway point near 90%.
+  const SWING = 2.0;         // margin variance per point scored
   const PRIOR_RATE = 3.0;    // combined points/minute assumed before any play is seen
   const RATE_K = 8;          // minutes of "prior" play blended into the observed scoring rate
-  const DRIFT_K = 64;        // shrinks the pace difference: a few minutes of play is weak evidence of who is better
 
   function normalCdf(z) {
     // Abramowitz & Stegun 7.1.26
@@ -480,8 +480,7 @@
     const lead = h - a;
     if (minsLeft <= 0) return { pHome: lead > 0 ? 1 : lead < 0 ? 0 : 0.5, mean: lead, sd: 0 };
     const rate = (h + a + PRIOR_RATE * RATE_K) / (minsPlayed + RATE_K);
-    const drift = lead / (minsPlayed + DRIFT_K);          // pace difference, shrunk toward 0
-    const mean = lead + drift * minsLeft;
+    const mean = lead;
     const sd = Math.sqrt(SWING * rate * minsLeft);
     return { pHome: normalCdf(mean / sd), mean, sd, rate };
   }
