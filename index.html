@@ -93,10 +93,10 @@
   .top .cap.r, .rows .cap.r { text-align: right; }
   .clock { font-size: clamp(1.6rem, 8vw, 2.6rem); }
   .board .per { font-size: clamp(1.3rem, 6vw, 2rem); width: 1.7em; }
-  .rows { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; column-gap: 4px; row-gap: 4px; align-items: end; border-top: 1px solid rgba(143, 208, 255, 0.12); padding-top: 8px; }
-  .tname { font-family: var(--display); font-weight: 600; font-size: clamp(0.68rem, 2.9vw, 1rem); letter-spacing: 0; text-transform: uppercase; }
+  .rows { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 6px; row-gap: 4px; align-items: end; border-top: 1px solid rgba(143, 208, 255, 0.12); padding-top: 8px; }
+  .tname { font-family: var(--display); font-weight: 600; font-size: clamp(0.72rem, 3.2vw, 1.05rem); letter-spacing: 0.02em; text-transform: uppercase;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; padding-bottom: 6px; }
   .board .pts { font-size: clamp(1.5rem, 7vw, 2.4rem); width: 1.85em; }
-  .board .fls { font-size: clamp(0.95rem, 4vw, 1.25rem); width: 1.7em; }
   .board.pending .led, .board.pending .tname { opacity: 0.35; }
   /* Board values are inputs so a misread can be fixed by hand */
   .board input {
@@ -104,7 +104,7 @@
     background: transparent; border: 0; border-bottom: 2px solid transparent; border-radius: 0;
     color: inherit; text-align: right; -webkit-appearance: none; appearance: none;
   }
-  .board input.clock, .board input.tname { text-align: left; }
+  .board input.clock { text-align: left; }
   .board input::placeholder { color: var(--led); opacity: 0.35; }
   .board input:hover { border-bottom-color: rgba(143, 208, 255, 0.25); }
   .board input:focus { outline: none; border-bottom-color: var(--led); background: rgba(143, 208, 255, 0.06); }
@@ -112,7 +112,7 @@
   .board input.bad { border-bottom-color: #ff7a6b; }
   input.led { font-family: var(--display); font-weight: 700; line-height: 1; }
   .edit-bar {
-    display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+    display: flex; justify-content: flex-end; align-items: center; gap: 10px; flex-wrap: wrap;
     border-top: 1px solid rgba(143, 208, 255, 0.12); padding: 8px 12px; text-align: left;
     color: var(--led-dim); font-size: 0.8rem; line-height: 1.3; background: #0b0e1b;
   }
@@ -238,13 +238,11 @@
             <div><label class="cap r" for="period">Per</label><input class="led per" id="period" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="-" aria-label="Period"></div>
           </div>
           <div class="rows">
-            <span class="cap">Team</span><span class="cap r">Pts</span><span class="cap r">Fls</span>
-            <input class="tname" id="home-name" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="HOME" aria-label="Home team name">
+            <span class="cap">Team</span><span class="cap r">Pts</span>
+            <span class="tname" id="home-name">HOME</span>
             <input class="led pts" id="home-score" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="--" aria-label="Home score">
-            <input class="led fls" id="home-fouls" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="-" aria-label="Home team fouls">
-            <input class="tname" id="away-name" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="AWAY" aria-label="Away team name">
+            <span class="tname" id="away-name">AWAY</span>
             <input class="led pts" id="away-score" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="--" aria-label="Away score">
-            <input class="led fls" id="away-fouls" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="-" aria-label="Away team fouls">
           </div>
         </div>
       </div>
@@ -252,9 +250,8 @@
         <span id="photo-name">Sample photo</span>
         <span class="legend"><span class="k-read">Read</span><span class="k-other">Other text</span></span>
       </div>
-      <div class="edit-bar">
-        <span id="edit-hint">Tap any number to fix a misread.</span>
-        <button type="button" id="undo-btn" hidden>Undo edits</button>
+      <div class="edit-bar" id="edit-bar" hidden>
+        <button type="button" id="undo-btn">Undo edits</button>
       </div>
     </section>
 
@@ -354,13 +351,9 @@
   let ocrResult = null, current = null;
   const FIELDS = {
     "clock":      { get: (r) => r.clock,      set: (r, v) => { r.clock = v; r.seconds = parseClock(v); }, ok: (v) => v === "" || parseClock(v) != null },
-    "home-name":  { get: (r) => r.home.name,  set: (r, v) => { r.home.name = v.toUpperCase() || null; }, ok: () => true },
-    "away-name":  { get: (r) => r.away.name,  set: (r, v) => { r.away.name = v.toUpperCase() || null; }, ok: () => true },
     "home-score": { get: (r) => r.home.score, set: (r, v) => { r.home.score = toInt(v); }, ok: isIntOrEmpty },
     "away-score": { get: (r) => r.away.score, set: (r, v) => { r.away.score = toInt(v); }, ok: isIntOrEmpty },
     "period":     { get: (r) => r.period,     set: (r, v) => { r.period = toInt(v) || null; }, ok: isIntOrEmpty },
-    "home-fouls": { get: (r) => r.home.fouls, set: (r, v) => { r.home.fouls = toInt(v); }, ok: isIntOrEmpty },
-    "away-fouls": { get: (r) => r.away.fouls, set: (r, v) => { r.away.fouls = toInt(v); }, ok: isIntOrEmpty },
   };
   function isIntOrEmpty(v) { return /^\d{0,3}$/.test(v.trim()); }
   function toInt(v) { return /^\d{1,3}$/.test(v.trim()) ? Number(v.trim()) : null; }
@@ -389,6 +382,8 @@
       el.value = v == null ? "" : String(v);
       el.classList.remove("edited", "bad");
     }
+    $("home-name").textContent = r.home.name || "HOME";
+    $("away-name").textContent = r.away.name || "AWAY";
     $("board").classList.remove("pending");
     updateEditBar();
     derive();
@@ -425,16 +420,12 @@
     }
   }
 
+  // The bar only appears when there is something to undo (or live updates to resume).
   function updateEditBar() {
     const edited = Object.keys(FIELDS).some((id) => $(id).classList.contains("edited"));
-    const btn = $("undo-btn");
-    if (live && liveEdited) {
-      btn.hidden = false; btn.textContent = "Resume live";
-      $("edit-hint").textContent = "Live updates paused while you edit.";
-    } else {
-      btn.hidden = !edited; btn.textContent = "Undo edits";
-      $("edit-hint").textContent = edited ? "Edited by hand. Calculations use your numbers." : "Tap any number to fix a misread.";
-    }
+    const resume = live && liveEdited;
+    $("undo-btn").textContent = resume ? "Resume live" : "Undo edits";
+    $("edit-bar").hidden = !(resume || edited);
   }
 
   for (const id of Object.keys(FIELDS)) {
@@ -579,6 +570,7 @@
 
   function clearBoard() {
     for (const id of Object.keys(FIELDS)) { $(id).value = ""; $(id).classList.remove("edited", "bad"); }
+    $("home-name").textContent = "HOME"; $("away-name").textContent = "AWAY";
     ocrResult = current = null;
     updateEditBar();
     $("game-note").textContent = "Reading…";
@@ -615,9 +607,11 @@
     }
   }
 
-  async function readPhoto(blob, name) {
-    if (busy) return;
-    if (live) await stopLive();
+  // src: an image file (Blob) or a canvas already holding the frame. Returns the reading, or null.
+  async function readPhoto(src, name) {
+    if (busy) return null;
+    if (live) await stopLive({ analyze: false });
+    let result = null;
     busy = true;
     $("pick-btn").setAttribute("aria-disabled", "true");
     $("live-btn").disabled = true;
@@ -625,7 +619,7 @@
     try {
       clearBoard();
       setStatus("Opening photo…", { progress: 0 });
-      const bmp = await loadBitmap(blob);
+      const bmp = src instanceof Blob ? await loadBitmap(src) : src;
       const bw = bmp.naturalWidth || bmp.width, bh = bmp.naturalHeight || bmp.height;
       const scale = Math.min(1, MAX_SIDE / Math.max(bw, bh));
       canvas.width = Math.round(bw * scale);
@@ -638,7 +632,7 @@
       await getWorker();
       setStatus("Reading the scoreboard…", { progress: 0.05 });
       let words = [];
-      const result = await readScoreboardPixels(pixels, ocr, {
+      result = await readScoreboardPixels(pixels, ocr, {
         onProgress: (p) => setStatus("Reading the scoreboard…", { progress: 0.05 + p * 0.95 }),
         onWords: (w) => { words = w; },
       });
@@ -662,6 +656,7 @@
       $("pick-btn").removeAttribute("aria-disabled");
       $("live-btn").disabled = false;
     }
+    return result;
   }
 
   async function readSample() {
@@ -683,7 +678,7 @@
   const frameCtx = frame.getContext("2d", { willReadFrequently: true });
   const inset = $("inset-canvas");
   const insetCtx = inset.getContext("2d");
-  let live = false, stream = null, liveRun = null, wakeLock = null, ticker = null, liveEdited = false;
+  let live = false, stream = null, liveRun = null, wakeLock = null, ticker = null, liveEdited = false, lastGoodResult = null;
 
   // ---------- zoom: the camera's own zoom when the browser offers it, otherwise a centre crop ----------
   const ZOOM_STEPS = [1, 1.5, 2, 3, 4];
@@ -772,7 +767,7 @@
     $("photo-name").textContent = "Live camera";
     const btn = $("live-btn");
     btn.textContent = "Stop video"; btn.classList.add("live-on"); btn.setAttribute("aria-pressed", "true");
-    lastGood = 0; reads = 0; goodReads = 0; lastReadMs = 0; liveEdited = false;
+    lastGood = 0; reads = 0; goodReads = 0; lastReadMs = 0; liveEdited = false; lastGoodResult = null;
     setupZoom(stream.getVideoTracks()[0]);
     $("inset").hidden = true;
     try { wakeLock = await navigator.wakeLock?.request("screen"); } catch (e) { wakeLock = null; }
@@ -803,6 +798,7 @@
         goodReads++;
         lastGood = Date.now();
         render(result);
+        lastGoodResult = result;
         // Keep the frame that produced this reading, with the detected text outlined.
         inset.width = frame.width; inset.height = frame.height;
         insetCtx.drawImage(frame, 0, 0);
@@ -815,14 +811,34 @@
     }
   }
 
-  async function stopLive() {
+  // Stop the camera. With analyze (the Stop video button), the frame on screen at that moment
+  // becomes the photo and gets a full read; if it can't be read, the last good live read is kept.
+  async function stopLive({ analyze = true } = {}) {
     if (!live) return;
     live = false;
     liveEdited = false;
     updateEditBar();
     clearInterval(ticker);
+
+    // Grab the final frame before the camera goes off (same crop as the zoomed view).
+    let finalFrame = null;
+    if (analyze && video.readyState >= 2 && video.videoWidth) {
+      const { sx, sy, sw, sh } = cropRegion(video.videoWidth, video.videoHeight);
+      const scale = Math.min(1, MAX_SIDE / Math.max(sw, sh));
+      finalFrame = document.createElement("canvas");
+      finalFrame.width = Math.round(sw * scale); finalFrame.height = Math.round(sh * scale);
+      finalFrame.getContext("2d").drawImage(video, sx, sy, sw, sh, 0, 0, finalFrame.width, finalFrame.height);
+    }
+    const good = { at: lastGood, result: lastGoodResult, reads, goodReads };
+    let goodFrame = null;
+    if (good.result) {   // copy of the last good frame (with its outlines) for the fallback
+      goodFrame = document.createElement("canvas");
+      goodFrame.width = inset.width; goodFrame.height = inset.height;
+      goodFrame.getContext("2d").drawImage(inset, 0, 0);
+    }
+
     // Turn the camera and controls off straight away; a read already in progress
-    // is discarded (the loop checks `live` before using it) and awaited at the end.
+    // is discarded (the loop checks `live` before using it).
     stream?.getTracks().forEach((t) => t.stop());
     stream = null; video.srcObject = null;
     video.style.transform = ""; $("zoom").hidden = true;
@@ -831,17 +847,24 @@
     video.hidden = true; $("live-badge").hidden = true; $("inset").hidden = true;
     const btn = $("live-btn");
     btn.textContent = "Live video"; btn.classList.remove("live-on"); btn.setAttribute("aria-pressed", "false");
-    // Leave the last good frame in the preview so the board below matches what's shown.
-    if (lastGood) {
-      canvas.width = inset.width; canvas.height = inset.height;
-      ctx.drawImage(inset, 0, 0);
-      $("photo-name").textContent = `Live camera · last good read`;
-    }
     canvas.hidden = false;
-    setStatus(lastGood ? `Stopped. Showing the last good read (${goodReads} of ${reads} frames read).` : "Stopped. No frame could be read.",
-      { err: !lastGood, progress: null });
     $("bar").parentElement.hidden = true;
     await liveRun?.catch(() => {});   // the OCR worker is free again after this
+
+    if (!finalFrame) return;
+    const result = await readPhoto(finalFrame, "Last video frame");
+    if (result && isGood(result)) return;
+    if (good.result) {
+      // The final frame was blurred or cut off: fall back to the last good live reading.
+      canvas.width = goodFrame.width; canvas.height = goodFrame.height;
+      ctx.drawImage(goodFrame, 0, 0);
+      $("photo-name").textContent = "Last good video frame";
+      render(good.result);
+      const secs = Math.max(1, Math.round((Date.now() - good.at) / 1000));
+      setStatus(`The final frame couldn't be fully read, so this is the last good read, from ${secs} s before you stopped.`,
+        { err: true, progress: null });
+      $("bar").parentElement.hidden = true;
+    }
   }
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
