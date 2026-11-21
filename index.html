@@ -821,7 +821,8 @@
     liveEdited = false;
     updateEditBar();
     clearInterval(ticker);
-    await liveRun?.catch(() => {});
+    // Turn the camera and controls off straight away; a read already in progress
+    // is discarded (the loop checks `live` before using it) and awaited at the end.
     stream?.getTracks().forEach((t) => t.stop());
     stream = null; video.srcObject = null;
     video.style.transform = ""; $("zoom").hidden = true;
@@ -840,6 +841,7 @@
     setStatus(lastGood ? `Stopped. Showing the last good read (${goodReads} of ${reads} frames read).` : "Stopped. No frame could be read.",
       { err: !lastGood, progress: null });
     $("bar").parentElement.hidden = true;
+    await liveRun?.catch(() => {});   // the OCR worker is free again after this
   }
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
