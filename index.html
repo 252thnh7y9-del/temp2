@@ -19,6 +19,7 @@
     --accent: #1f6fd1;
     --accent-fg: #ffffff;
     --warn: #a05a00;
+    --away: #d26a1e;
     /* The read-out is a scoreboard in both themes */
     --board: #161a2e;
     --board-grid: rgba(255, 255, 255, 0.045);
@@ -30,13 +31,13 @@
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       --bg: #0c0f1a; --surface: #151a2a; --fg: #e4e9f3; --muted: #97a1b6; --line: #273049;
-      --accent: #6cb6ff; --accent-fg: #0c0f1a; --warn: #f0b45c;
+      --accent: #6cb6ff; --accent-fg: #0c0f1a; --warn: #f0b45c; --away: #f09a52;
       --board: #0f1324; color-scheme: dark;
     }
   }
   :root[data-theme="dark"] {
     --bg: #0c0f1a; --surface: #151a2a; --fg: #e4e9f3; --muted: #97a1b6; --line: #273049;
-    --accent: #6cb6ff; --accent-fg: #0c0f1a; --warn: #f0b45c;
+    --accent: #6cb6ff; --accent-fg: #0c0f1a; --warn: #f0b45c; --away: #f09a52;
     --board: #0f1324; color-scheme: dark;
   }
 
@@ -165,6 +166,26 @@
   .qlabels .on { color: var(--fg); font-weight: 600; }
   .game-note { margin: 0; font-size: 0.85rem; color: var(--muted); }
   .game-note.warn { color: var(--warn); }
+
+  /* ---- likely to win: home on the left, away on the right ---- */
+  .odds { display: grid; gap: 8px; }
+  .odds-names { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+  .odds-names span { font-family: var(--display); font-weight: 700; font-size: 0.95rem; letter-spacing: 0.02em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .odds-names b { font-variant-numeric: tabular-nums; font-size: 1.35rem; margin-left: 6px; }
+  #win-home-k { color: var(--accent); }
+  #win-away-k { color: var(--away); text-align: right; }
+  .odds-track {
+    position: relative; height: 14px; border-radius: 7px;
+    background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 25%, var(--surface)) 50%, color-mix(in srgb, var(--away) 25%, var(--surface)) 50%, var(--away));
+  }
+  .odds-track::after { content: ""; position: absolute; left: 50%; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--muted); opacity: 0.5; }
+  .odds-thumb {
+    position: absolute; top: 50%; left: 50%; width: 24px; height: 24px; margin: -12px 0 0 -12px; z-index: 1;
+    border-radius: 50%; background: var(--surface); border: 3px solid var(--fg); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+    transition: left 0.5s ease;
+  }
+  .odds-thumb[hidden] { display: none; }
+  @media (prefers-reduced-motion: reduce) { .odds-thumb { transition: none; } }
   .tiles.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .tile .k.team { overflow-wrap: anywhere; }
   .tile.total { background: var(--bg); }
@@ -234,18 +255,12 @@
       </div>
 
       <section class="game" aria-live="polite">
-        <h2>Game time <small>8-minute quarters</small></h2>
-        <div class="tiles">
-          <div class="tile"><span class="k">Quarter elapsed</span><span class="v" id="q-elapsed">–</span><span class="s" id="q-elapsed-s">&nbsp;</span></div>
-          <div class="tile remain"><span class="k">Quarter left</span><span class="v" id="q-left">–</span><span class="s" id="q-left-s">&nbsp;</span></div>
-          <div class="tile"><span class="k">Game elapsed</span><span class="v" id="g-elapsed">–</span><span class="s" id="g-elapsed-s">of 32:00</span></div>
-          <div class="tile remain"><span class="k">Game left</span><span class="v" id="g-left">–</span><span class="s" id="g-left-s">&nbsp;</span></div>
+        <h2>Likely to win <small id="win-sub">&nbsp;</small></h2>
+        <div class="odds">
+          <div class="odds-names"><span id="win-home-k">HOME<b id="win-home-p">–</b></span><span id="win-away-k"><b id="win-away-p">–</b> AWAY</span></div>
+          <div class="odds-track" role="img" id="win-bar" aria-label="Win chances not available yet"><i class="odds-thumb" id="win-thumb" hidden></i></div>
         </div>
-        <div class="timeline" aria-hidden="true">
-          <div class="track"><i id="g-fill"></i><b style="left:25%"></b><b style="left:50%"></b><b style="left:75%"></b></div>
-          <div class="qlabels" id="qlabels"><span>Q1</span><span>Q2</span><span>Q3</span><span>Q4</span></div>
-        </div>
-        <p class="game-note" id="game-note">Waiting for a photo</p>
+        <p class="game-note" id="win-note">Waiting for a photo</p>
       </section>
 
       <section class="game" aria-live="polite">
@@ -262,6 +277,22 @@
         </div>
         <p class="game-note" id="pace-note">Waiting for a photo</p>
       </section>
+
+      <section class="game" aria-live="polite">
+        <h2>Game time <small>8-minute quarters</small></h2>
+        <div class="tiles">
+          <div class="tile"><span class="k">Quarter elapsed</span><span class="v" id="q-elapsed">–</span><span class="s" id="q-elapsed-s">&nbsp;</span></div>
+          <div class="tile remain"><span class="k">Quarter left</span><span class="v" id="q-left">–</span><span class="s" id="q-left-s">&nbsp;</span></div>
+          <div class="tile"><span class="k">Game elapsed</span><span class="v" id="g-elapsed">–</span><span class="s" id="g-elapsed-s">of 32:00</span></div>
+          <div class="tile remain"><span class="k">Game left</span><span class="v" id="g-left">–</span><span class="s" id="g-left-s">&nbsp;</span></div>
+        </div>
+        <div class="timeline" aria-hidden="true">
+          <div class="track"><i id="g-fill"></i><b style="left:25%"></b><b style="left:50%"></b><b style="left:75%"></b></div>
+          <div class="qlabels" id="qlabels"><span>Q1</span><span>Q2</span><span>Q3</span><span>Q4</span></div>
+        </div>
+        <p class="game-note" id="game-note">Waiting for a photo</p>
+      </section>
+
 
     </div>
   </div>
@@ -423,6 +454,74 @@
     $("pace-note").textContent = note;
     $("pace-note").classList.toggle("warn", warn);
     renderNeed(r, t, mins);
+    renderWin(r, t);
+  }
+
+  // ---------- likely to win ----------
+  // The final margin (home minus away) is modelled as a normal distribution, the usual
+  // random-walk model for basketball scores (Stern, 1994):
+  //   expected margin = current lead + (shrunk) scoring-rate difference x minutes left
+  //   spread (s.d.)   = sqrt(SWING x scoring rate x minutes left)
+  // SWING ~1.25 matches the ~16-point s.d. of NBA final margins at ~4.2 points/minute;
+  // scaling by this game's scoring rate adapts it to slower youth games.
+  const SWING = 1.25;        // margin variance per point scored
+  const PRIOR_RATE = 3.0;    // combined points/minute assumed before any play is seen
+  const RATE_K = 8;          // minutes of "prior" play blended into the observed scoring rate
+  const DRIFT_K = 64;        // shrinks the pace difference: a few minutes of play is weak evidence of who is better
+
+  function normalCdf(z) {
+    // Abramowitz & Stegun 7.1.26
+    const t = 1 / (1 + 0.3275911 * Math.abs(z) / Math.SQRT2);
+    const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-(z * z) / 2);
+    return z >= 0 ? (1 + y) / 2 : (1 - y) / 2;
+  }
+
+  function winChance(h, a, minsPlayed, minsLeft) {
+    const lead = h - a;
+    if (minsLeft <= 0) return { pHome: lead > 0 ? 1 : lead < 0 ? 0 : 0.5, mean: lead, sd: 0 };
+    const rate = (h + a + PRIOR_RATE * RATE_K) / (minsPlayed + RATE_K);
+    const drift = lead / (minsPlayed + DRIFT_K);          // pace difference, shrunk toward 0
+    const mean = lead + drift * minsLeft;
+    const sd = Math.sqrt(SWING * rate * minsLeft);
+    return { pHome: normalCdf(mean / sd), mean, sd, rate };
+  }
+
+  function renderWin(r, t) {
+    const home = r?.home.name || "HOME", away = r?.away.name || "AWAY";
+    $("win-home-k").firstChild.textContent = home;
+    $("win-away-k").lastChild.textContent = " " + away;
+    const thumb = $("win-thumb"), note = $("win-note");
+    const blank = (msg, warn) => {
+      $("win-home-p").textContent = "–"; $("win-away-p").textContent = "–"; $("win-sub").textContent = "\u00a0";
+      thumb.hidden = true; $("win-bar").setAttribute("aria-label", "Win chances not available");
+      note.textContent = msg; note.classList.toggle("warn", !!warn);
+    };
+    const h = r?.home.score, a = r?.away.score;
+    if (!r) return blank("Waiting for a photo");
+    if (h == null || a == null || !t || t.error || t.gElapsed == null) return blank("Needs both scores, the clock and the period.", true);
+    // In overtime the clock is the time left in the overtime period.
+    const minsLeft = (t.overtime ? t.qLeft : t.gLeft) / 60;
+    const minsPlayed = t.gElapsed / 60;
+    const w = winChance(h, a, minsPlayed, minsLeft);
+    const pct = (p) => (p > 0.995 && p < 1 ? ">99" : p < 0.005 && p > 0 ? "<1" : String(Math.round(p * 100))) + "%";
+    $("win-home-p").textContent = pct(w.pHome);
+    $("win-away-p").textContent = pct(1 - w.pHome);
+    thumb.hidden = false;
+    thumb.style.left = `${(1 - w.pHome) * 100}%`;   // slides toward the likely winner; home is on the left
+    $("win-bar").setAttribute("aria-label", `${home} ${pct(w.pHome)}, ${away} ${pct(1 - w.pHome)}`);
+    const lead = h - a, leader = lead > 0 ? home : away;
+    let msg;
+    if (minsLeft <= 0) {
+      msg = lead === 0 ? "Tied with no time left: overtime decides it." : `${leader} won by ${Math.abs(lead)}.`;
+      $("win-sub").textContent = "Final";
+    } else {
+      const swing = Math.max(1, Math.round(w.sd));
+      msg = (lead === 0 ? "Tied" : `${leader} +${Math.abs(lead)}`)
+        + ` with ${fmt(minsLeft * 60)} left. Could still swing ±${swing} pt${swing === 1 ? "" : "s"}.`;
+      $("win-sub").textContent = t.overtime ? "Overtime" : "From lead, time and pace";
+    }
+    note.textContent = msg;
+    note.classList.remove("warn");
   }
 
   // Pace the trailing team needs to win by the end of regulation, if the leader stops scoring.
